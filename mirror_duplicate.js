@@ -85,9 +85,12 @@
 
 	function targetParent(el) {
 		const parent = el.parent;
-		if (!(parent instanceof Group)) return 'root';
-		const name = mirrorName(parent.name);
-		const twin = name && Group.all.find(g => g.name === name && g !== parent);
+		if (!parent || parent === 'root' || typeof parent !== 'object') return 'root';
+		// Groups, armatures and armature bones (Bones as Folders): prefer a twin of the same type, e.g. lid_l → lid_r.
+		const name = mirrorName(parent.name || '');
+		const pool = parent instanceof Group ? Group.all
+			: (typeof ArmatureBone !== 'undefined' && parent instanceof ArmatureBone) ? ArmatureBone.all : [];
+		const twin = name && pool.find(g => g.name === name && g !== parent);
 		return twin || parent;
 	}
 
@@ -175,7 +178,7 @@
 		author: 'yarrbeard-gyps',
 		description: 'Duplicate meshes and cubes as true mirror images (points, pivot, rotation, winding), keeping UVs and swapping _l/_r names.',
 		icon: 'flip',
-		version: '1.0.0',
+		version: '1.0.1',
 		variant: 'both',
 		min_version: '5.2.0',
 		tags: ['Modeling', 'Mesh'],

@@ -19,7 +19,9 @@ For each selected mesh or cube, in one undo step:
 - **Swaps the side in the name:** `_l`↔`_r`, `_L`↔`_R`, `.L`↔`.R`, `left`↔`right`. Names without a side get
   `_mirror`.
 - **Places it** in the mirrored-name group if one exists (a part in `leg_l` goes to `leg_r`), otherwise next to
-  the original. The copies end up selected.
+  the original. The same works for armature bones when you use
+  [Bones as Folders](https://github.com/yarrbeard-gyps/blockbench-bones-as-folders) (`lid_l` → `lid_r`), and parts
+  directly under an armature stay in it. The copies end up selected.
 
 Cubes use Blockbench's own cube flip, which also swaps their east/west UVs.
 

@@ -57,6 +57,9 @@ class Node {
 }
 class Mesh extends Node {}
 class Cube extends Node { flip(axis, center) { this.flipped = [axis, center]; this.name = 'blockbench-renamed'; } }
+class ArmatureBone { constructor(name) { this.name = name; this.children = []; } }
+const lidBoneL = new ArmatureBone('lid_l'), lidBoneR = new ArmatureBone('lid_r'); ArmatureBone.all = [lidBoneL, lidBoneR];
+const armature = { name: 'armature', children: [] };
 const legL = new Group('leg_l', 'root'), legR = new Group('leg_r', 'root'), body = new Group('body', 'root', [0, 0, 10]);
 const thigh = new Mesh(Object.assign(clone(src), { name: 'thigh_l', texture: 't1' })); thigh.parent = legL;
 const eye = new Mesh(Object.assign(clone(src), { name: 'eye_l' })); eye.parent = body;
@@ -67,7 +70,7 @@ function MenuSeparator() {}
 Mesh.prototype.menu = { structure: ['a', sep('settings'), 'b'], addAction(a, i) { this.structure.splice(i, 0, a); } };
 Cube.prototype.menu = { structure: [sep('settings')], addAction(a, i) { this.structure.splice(i, 0, a); } };
 const ctx = {
-	Plugin: { register: (id, o) => { registered = { id, o }; } }, BARS: {}, Mesh, Cube, Group, MenuSeparator,
+	Plugin: { register: (id, o) => { registered = { id, o }; } }, BARS: {}, Mesh, Cube, Group, MenuSeparator, ArmatureBone,
 	Outliner: { selected: [thigh, eye, box] }, getSelectionCenter: () => [7, 0, 0],
 	Undo: { initEdit: a => undo.push(['init', a]), finishEdit: m => undo.push(['finish', m]) },
 	unselectAllElements: () => { selected = []; }, updateSelection() {}, Canvas: { updateView() {} },
@@ -103,6 +106,16 @@ dialog.o.onConfirm({ axis: '0', plane: 'selection' });
 ok(near(undo[0][1].elements[0].origin, [11, 2, -1]), 'selection centre plane (X = 7)');
 action.click();
 ok(dialog.o.form.plane.value === 'selection', 'last options remembered');
+
+// Parents that aren't groups: an armature (copy stays inside it) and a bone with a twin (Bones as Folders).
+const armPart = new Mesh(Object.assign(clone(src), { name: 'toe_l' })); armPart.parent = armature;
+const lidPart = new Mesh(Object.assign(clone(src), { name: 'eyelid_l' })); lidPart.parent = lidBoneL;
+ctx.Outliner.selected.splice(0, 3, armPart, lidPart);
+undo = [];
+dialog.o.onConfirm({ axis: '0', plane: 'world' });
+const [toeR, lidR] = undo[0][1].elements;
+ok(toeR.parent === armature && toeR.name === 'toe_r', 'part under an armature stays in that armature');
+ok(lidR.parent === lidBoneR && lidR.name === 'eyelid_r', 'part inside bone lid_l goes into bone lid_r');
 registered.o.onunload();
 ok(action.deleted && !Mesh.prototype.menu.structure.includes(action), 'unload cleans up');
 console.log(`\n${pass} checks passed`);
