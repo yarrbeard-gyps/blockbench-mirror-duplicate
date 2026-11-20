@@ -14,6 +14,19 @@ const names = { eye_l: 'eye_r', eyelid_l: 'eyelid_r', foreleg_L: 'foreleg_R', 'A
 ok(Object.entries(names).every(([a, b]) => core.mirrorName(a) === b), 'side names swap (_l/_r, _L/_R, .L, left/right)');
 ok(core.mirrorName('foot') === null && core.mirrorName('helmet') === null, 'names without a side are reported as such (no false hits in "helmet")');
 
+// ---- weights (core)
+{
+	const head = { name: 'head', vertex_weights: { 'abc123:a': 1, 'abc123:b': 0.4, 'zzz999:a': 1 } };
+	const lidL = { name: 'lid_l', vertex_weights: { 'abc123:b': 0.6, 'abc123:c': 1 } };
+	const lidR = { name: 'lid_r', vertex_weights: {} };
+	const twin = b => (b === lidL ? lidR : b === lidR ? lidL : null);
+	const n = core.mirrorWeights([head, lidL, lidR], 'abc123-src', 'def456-dst', twin);
+	ok(n === 4, 'every painted weight of the source copied, and only the source weights');
+	ok(head.vertex_weights['def456:a'] === 1 && head.vertex_weights['def456:b'] === 0.4, 'weights on side-less bones (head) stay on that bone');
+	ok(lidR.vertex_weights['def456:b'] === 0.6 && lidR.vertex_weights['def456:c'] === 1 && !lidL.vertex_weights['def456:b'], 'weights on lid_l go to lid_r, point for point');
+	ok(head.vertex_weights['abc123:a'] === 1 && lidL.vertex_weights['abc123:b'] === 0.6, 'source weights untouched');
+}
+
 // ---- geometry: world-space check with a rotated mesh, Euler order ZYX and XYZ
 const rad = d => d * Math.PI / 180;
 const mul = (A, B) => A.map((r, i) => [0, 1, 2].map(j => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
@@ -57,8 +70,9 @@ class Node {
 }
 class Mesh extends Node {}
 class Cube extends Node { flip(axis, center) { this.flipped = [axis, center]; this.name = 'blockbench-renamed'; } }
-class ArmatureBone { constructor(name) { this.name = name; this.children = []; } }
-const lidBoneL = new ArmatureBone('lid_l'), lidBoneR = new ArmatureBone('lid_r'); ArmatureBone.all = [lidBoneL, lidBoneR];
+class ArmatureBone { constructor(name) { this.name = name; this.children = []; this.vertex_weights = {}; } getArmature() { return rig; } }
+const lidBoneL = new ArmatureBone('lid_l'), lidBoneR = new ArmatureBone('lid_r'), headBone = new ArmatureBone('head'); ArmatureBone.all = [lidBoneL, lidBoneR, headBone];
+const rig = { getAllBones: () => [headBone, lidBoneL, lidBoneR] };
 const armature = { name: 'armature', children: [] };
 const legL = new Group('leg_l', 'root'), legR = new Group('leg_r', 'root'), body = new Group('body', 'root', [0, 0, 10]);
 const thigh = new Mesh(Object.assign(clone(src), { name: 'thigh_l', texture: 't1' })); thigh.parent = legL;
@@ -116,6 +130,23 @@ dialog.o.onConfirm({ axis: '0', plane: 'world' });
 const [toeR, lidR] = undo[0][1].elements;
 ok(toeR.parent === armature && toeR.name === 'toe_r', 'part under an armature stays in that armature');
 ok(lidR.parent === lidBoneR && lidR.name === 'eyelid_r', 'part inside bone lid_l goes into bone lid_r');
+
+// Weights: eyelid_l inside lid_l, back painted to head, front to lid_l, middle split.
+const lidPart2 = new Mesh(Object.assign(clone(src), { name: 'eyelid_l' })); lidPart2.parent = lidBoneL; lidPart2.uuid = 'eyeL01-uuid';
+lidPart2.getArmature = () => rig;
+headBone.vertex_weights = { 'eyeL01:a': 1, 'eyeL01:e': 0.5 };
+lidBoneL.vertex_weights = { 'eyeL01:c': 1, 'eyeL01:d': 1, 'eyeL01:e': 0.5 };
+lidBoneR.vertex_weights = {};
+ctx.Outliner.selected.splice(0, ctx.Outliner.selected.length, lidPart2);
+undo = [];
+dialog.o.onConfirm({ axis: '0', plane: 'world' });
+const tracked = undo[0][1].elements, eyeR = tracked[tracked.length - 1];
+const k = vk => eyeR.uuid.substring(0, 6) + ':' + vk;
+ok(eyeR.parent === lidBoneR && eyeR.name === 'eyelid_r', 'copy lands inside lid_r by itself');
+ok(headBone.vertex_weights[k('a')] === 1 && headBone.vertex_weights[k('e')] === 0.5, 'back and middle weights on head copied');
+ok(lidBoneR.vertex_weights[k('c')] === 1 && lidBoneR.vertex_weights[k('e')] === 0.5 && !lidBoneL.vertex_weights[k('c')], 'lid weights moved to lid_r');
+ok(['head', 'lid_l', 'lid_r'].every(n => tracked.some(t => t.name === n)) && undo[1][1] === 'Mirror duplicate', 'bones are part of the one undo step');
+ok(/vertex weights/.test(quick), 'message mentions the weights');
 registered.o.onunload();
 ok(action.deleted && !Mesh.prototype.menu.structure.includes(action), 'unload cleans up');
 console.log(`\n${pass} checks passed`);

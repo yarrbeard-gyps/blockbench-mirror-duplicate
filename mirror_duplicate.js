@@ -57,7 +57,31 @@
 		return data;
 	}
 
-	const core = { mirrorName, mirrorMeshData };
+	/**
+	 * Copy a mesh's vertex weights to its mirrored copy. Weights live on the bones, keyed meshuuid[0:6]:vkey;
+	 * the copy keeps the same vertex keys (each point maps to its own mirror image). Each weight moves to the
+	 * bone's twin (lid_l → lid_r) if there is one, else stays on the same bone (head, bag).
+	 * bones: [{vertex_weights}], twinOf(bone) → bone | null. Returns how many weights were copied.
+	 */
+	function mirrorWeights(bones, srcUuid, dstUuid, twinOf) {
+		const src = srcUuid.substring(0, 6) + ':', dst = dstUuid.substring(0, 6) + ':';
+		const writes = [];
+		for (const bone of bones) {
+			for (const key of Object.keys(bone.vertex_weights || {})) {
+				if (!key.startsWith(src)) continue;
+				const w = bone.vertex_weights[key];
+				if (!(w > 0)) continue;
+				writes.push([twinOf(bone) || bone, dst + key.substring(src.length), w]);
+			}
+		}
+		for (const [bone, key, w] of writes) {
+			if (!bone.vertex_weights) bone.vertex_weights = {};
+			bone.vertex_weights[key] = w;
+		}
+		return writes.length;
+	}
+
+	const core = { mirrorName, mirrorMeshData, mirrorWeights };
 
 	// Outside Blockbench (Node tests) export the core and stop here.
 	if (typeof Plugin === 'undefined' || typeof BARS === 'undefined') {
@@ -112,9 +136,20 @@
 		}
 		const center = planeCenter(axis, options.plane, sources);
 		const copies = [];
-		let warnRotated = 0;
+		let warnRotated = 0, weightsCopied = 0;
 
-		Undo.initEdit({ elements: copies, outliner: true, selection: true });
+		// Bones of the armatures involved: their weights change, so they're part of the undo step.
+		const armatureOf = el => (el instanceof Mesh && typeof el.getArmature === 'function') ? el.getArmature() : undefined;
+		const armatures = [...new Set(sources.map(armatureOf).filter(Boolean))];
+		const tracked = armatures.flatMap(a => a.getAllBones());
+		const twinOf = bone => {
+			const name = mirrorName(bone.name || '');
+			if (!name) return null;
+			const arm = bone.getArmature ? bone.getArmature() : null;
+			return (arm ? arm.getAllBones() : []).find(b => b.name === name && b !== bone) || null;
+		};
+
+		Undo.initEdit({ elements: tracked, outliner: true, selection: true });
 		for (const el of sources) {
 			const data = el.getSaveCopy();
 			delete data.uuid;
@@ -139,6 +174,11 @@
 				copy.name = name;
 			}
 			copies.push(copy);
+			tracked.push(copy);
+
+			// Vertex weights (armature-direct meshes, and meshes inside bones with Bones as Folders).
+			const arm = armatureOf(el);
+			if (arm && copy instanceof Mesh) weightsCopied += mirrorWeights(arm.getAllBones(), el.uuid, copy.uuid, twinOf);
 		}
 
 		unselectAllElements();
@@ -148,6 +188,7 @@
 		Undo.finishEdit('Mirror duplicate');
 
 		let msg = `Mirrored ${copies.length} part${copies.length === 1 ? '' : 's'} across ${'XYZ'[axis]} = ${+center.toFixed(4)}`;
+		if (weightsCopied) msg += `, with their vertex weights`;
 		if (warnRotated) msg += `. ${warnRotated} sit in a rotated group that has no mirrored twin, so check their placement`;
 		Blockbench.showQuickMessage(msg, 3500);
 	}
@@ -178,7 +219,7 @@
 		author: 'yarrbeard-gyps',
 		description: 'Duplicate meshes and cubes as true mirror images (points, pivot, rotation, winding), keeping UVs and swapping _l/_r names.',
 		icon: 'flip',
-		version: '1.0.1',
+		version: '1.1.0',
 		variant: 'both',
 		min_version: '5.2.0',
 		tags: ['Modeling', 'Mesh'],

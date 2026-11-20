@@ -16,6 +16,10 @@ For each selected mesh or cube, in one undo step:
   exactly opposite.
 - **Fixes the face winding**, so the copy isn't inside-out.
 - **Keeps the UVs and texture**, so the copy shares the painted texture.
+- **Copies the vertex weights**, point for point. Weights on a sided bone move to its twin (`lid_l` → `lid_r`, `thigh_L`
+  → `thigh_R`), and weights on bones without a side (`head`) stay on that bone. This covers rigged meshes directly under
+  an armature and meshes inside bones ([Bones as Folders](https://github.com/yarrbeard-gyps/blockbench-bones-as-folders)).
+  Because the copy is already weighted, Bones as Folders doesn't auto-paint it.
 - **Swaps the side in the name:** `_l`↔`_r`, `_L`↔`_R`, `.L`↔`.R`, `left`↔`right`. Names without a side get
   `_mirror`.
 - **Places it** in the mirrored-name group if one exists (a part in `leg_l` goes to `leg_r`), otherwise next to
@@ -37,11 +41,11 @@ search for "Mirror Duplicate" in **Settings ▸ Keybindings**.
 ## Limits
 - A part inside a **rotated** group that has no mirrored twin group is mirrored in model space, ignoring the group's
   rotation. A message tells you to check its placement. Mirrored twin groups (`leg_l` / `leg_r`) are fine.
-- Vertex weights aren't copied. Run Calculate Vertex Weights on the copies if they're rigged.
 
 ## Tested
 In Blockbench 5.2.2 on a real model: left-side eyes, eyelids and legs were mirrored to the right, sharing the
-painted texture and rendering the right way out.
+painted texture and rendering the right way out. 1.1.0: a hand-weighted eyelid inside bone `lid_l` mirrored into
+`lid_r` with its weights mirrored point for point.
 
 Offline: `node tests/verify_mirror_duplicate.js` checks, in world space with a rotated mesh (Euler ZYX and XYZ),
 mirrored across X, Y and Z planes:
@@ -49,8 +53,8 @@ mirrored across X, Y and Z planes:
 - the face normals come out mirrored and still point outward. The test fails if the winding fix is removed.
 - the UVs are kept.
 
-It also runs the plugin against a mock of Blockbench to check naming, twin groups, the plane choice, undo, selection,
-menus and unload.
+It also runs the plugin against a mock of Blockbench to check naming, twin groups and bones, the plane choice,
+vertex weights (moved to twin bones, side-less bones kept), undo, selection, menus and unload.
 
 ## Credits
 Written with the help of an AI coding assistant (Claude). Issues and pull requests are welcome.
