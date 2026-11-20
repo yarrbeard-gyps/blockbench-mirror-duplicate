@@ -1,0 +1,1 @@
+Duplicates the selected meshes and cubes as **true mirror images** across X, Y or Z (world centre or selection centre). It mirrors points, pivot and rotation, fixes the face winding, keeps the UVs and texture, renames `_l`↔`_r`, and puts the copy in the matching `_r` group. **Transform ▸ Mirror Duplicate...** or the element right-click menu.
